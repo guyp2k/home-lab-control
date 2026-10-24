@@ -71,22 +71,20 @@ Lessons is a searchable record of things that went wrong and how they were fixed
 
 ![Lessons](screenshots/lessons.png)
 
-## In Development: AI Explain
+### AI Explain
+Every problem, warning and note on the Health tab gets an **Explain** button. Clicking it asks a language model running locally on the lab's own GPU (through Ollama) for the likely cause and the next steps to check. One switch in the Health header turns the feature on or off for the whole page.
 
-> **Status:** being built now. The screenshot below is a design preview, not the shipped feature.
+![AI Explain](screenshots/ai-explain.png)
 
-AI Explain adds an **Explain** button to every finding on the Health tab. Clicking it asks a language model running locally on the lab's own GPU (through Ollama) for the likely cause and the next steps. One switch turns the feature on or off for the whole page.
-
-![AI Explain preview](screenshots/ai-explain-preview.png)
-
-How it is designed to work:
+How it works:
 - **Local only.** The model runs on the lab's GPU. Logs never leave the LAN.
-- **Advice, never action.** The model has no tools and can't run commands. Every answer is labelled "AI suggestion · verify before acting".
-- **Shows its evidence.** Each answer lists the log lines it was given, so you can check its reasoning against the source.
-- **Uses the lab's own history.** Matching entries from the Lessons tab are passed to the model with the logs, and the answer cites them.
-- **Doesn't fight other GPU users.** It uses whatever model is already loaded. If the GPU is busy, it says so instead of waiting in line.
-- **Cached.** A finding that repeats the next day reuses its earlier answer.
-- **Treats logs as untrusted.** Log text can come from many sources, so it is passed to the model as data, never as instructions.
+- **Advice, never action.** The model has no tools and can't run commands. Every answer is labelled "AI suggestion · verify before acting" and ends with "Advice only. Nothing was run on any host."
+- **Shows its evidence.** When a finding quotes a log line, the matching lines from the last two days are pulled from the log store, given to the model and shown under the answer, so you can check its reasoning against the source.
+- **Uses the lab's own history.** Lessons that match the finding are given to the model too, and the answer names them.
+- **Plays nicely with other GPU users.** It uses whichever model is already loaded rather than swapping in one of its own. It waits its turn if the GPU is busy, and only one explanation runs at a time.
+- **Saves answers.** A finding that comes back the next day, with only its count or timestamp changed, reuses the earlier answer. **Ask again** gets a fresh one.
+- **Treats logs as untrusted.** Credentials are scrubbed from every line before the model sees it, and log text is passed as data, never as instructions.
+- **Skips stale cards.** Findings on a host that hasn't reported for over a day get no button.
 
 ## How It's Built
 
@@ -94,6 +92,7 @@ How it is designed to work:
 - **API:** a small Python service using only the standard library. It checks each service's status, serves and stores the editable tables, and receives the daily health reports. The tables can only be read or changed through the dashboard itself.
 - **GPU stats:** a separate small service reads the GPU through the NVIDIA driver, so the main API needs no GPU access.
 - **Logs:** Grafana Alloy ships syslog to Loki, and Grafana shows it inside the Logs tab.
+- **AI:** Ollama on a local GPU answers AI Explain requests. The API reads evidence from Loki and sends the model only scrubbed text.
 - **Health checks:** read-only scripts on each Unraid server, run daily by Unraid's User Scripts plugin.
 - **Deploy:** Docker Compose on Unraid.
   - Merged changes to the page and the compose file deploy automatically.
@@ -103,5 +102,5 @@ How it is designed to work:
 
 - LAN only, behind basic auth. Nothing is exposed to the internet.
 - No secrets live in the dashboard or its repository. Passwords stay in the vault.
-- The editable tables accept reads and writes only from the dashboard's web server.
+- The editable tables and AI Explain accept requests only from the dashboard's web server.
 - Health reports are accepted only from the lab's own servers, and each server can update only its own card.
