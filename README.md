@@ -12,7 +12,9 @@ It runs on the lab's own Unraid server, stays on the LAN behind basic auth, and 
 ## What It Does
 
 ### Services
-Every service in the lab gets a tile, grouped by role (Core, Media, Smart Home, AI, Handoff). Each tile shows whether the service is up, refreshes every 30 seconds, and opens the service's web UI on click. The header keeps a running count ("20 up / 22 total") so a problem is visible from any tab.
+Every service in the lab gets a tile, grouped by role (Core, Media, Smart Home, AI, Git & CI, Handoff). Each tile shows whether the service is up, refreshes every 30 seconds, and opens the service's web UI on click. The header keeps a running count ("21 up / 23 total") so a problem is visible from any tab.
+
+Each group folds into a section, and a closed section's header still shows a live count, such as "2 down · 6 up". A section opens by itself while something in it is down and closes again once it recovers. Anything you open or close stays that way in your browser, and Expand all / Collapse all handle every section at once.
 
 Some tiles show live stats as well as up or down. The Ollama tile shows which model is loaded and how much of it sits on the GPU. The GPU tile shows load, VRAM, temperature and power.
 
@@ -30,6 +32,12 @@ Syslog from every server, the router and Home Assistant, collected in one place 
 
 ### Network
 A topology diagram of the whole network (router, switches, access points, servers) and the VLAN plan as an editable table.
+
+The diagram is live:
+- **Status on every box.** A dot shows whether each device answers: green up, red down, grey not checked yet. A cold-standby box is marked as standby, not as an outage.
+- **Click for details.** Clicking a box (or tabbing to it and pressing Enter) opens a side panel with its live status, its address and ports, and a link to its web UI.
+- **Wires from UniFi.** Each cable is coloured from its switch port on the UniFi controller: green 10 GbE, teal 2.5 GbE, cyan 1 GbE, amber slower, red link down. Hovering a wire shows both ends, the link speed, current traffic, PoE draw and errors. The panel adds what UniFi knows about the device: clients on an access point, ports up on a switch, and the mesh parent of a wireless extender.
+- **Honest when data is missing.** If the controller can't be read, the wires stay as drawn and a note under the diagram says why. If a reading goes stale, the last good one stays on screen, marked stale.
 
 ![Network](screenshots/network.png)
 
@@ -90,6 +98,7 @@ How it works:
 
 - **Web:** a static page served by nginx, with no build step and no framework. Editable tables save straight back to the server.
 - **API:** a small Python service using only the standard library. It checks each service's status, serves and stores the editable tables, and receives the daily health reports. The tables can only be read or changed through the dashboard itself.
+- **Link data:** the same service reads the UniFi controller every 30 seconds for each switch port's link state, speed and traffic, and each device's uplink.
 - **GPU stats:** a separate small service reads the GPU through the NVIDIA driver, so the main API needs no GPU access.
 - **Logs:** Grafana Alloy ships syslog to Loki, and Grafana shows it inside the Logs tab.
 - **AI:** Ollama on a local GPU answers AI Explain requests. The API reads evidence from Loki and sends the model only scrubbed text.
@@ -102,5 +111,6 @@ How it works:
 
 - LAN only, behind basic auth. Nothing is exposed to the internet.
 - No secrets live in the dashboard or its repository. Passwords stay in the vault.
-- The editable tables and AI Explain accept requests only from the dashboard's web server.
+- The editable tables, AI Explain and the link data accept requests only from the dashboard's web server.
+- UniFi is read with a View Only local account. Its login lives in a file on the server, never in the repository.
 - Health reports are accepted only from the lab's own servers, and each server can update only its own card.
