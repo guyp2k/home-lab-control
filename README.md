@@ -1,6 +1,6 @@
 # Home Lab Control
 
-A single dashboard for running a home lab: what's up, what broke overnight, how the network is laid out and how busy each link is, where every container lives, who gets told when something fails, and how to get back in when something goes wrong.
+A single dashboard for running a home lab: what's up, what broke overnight, how the network is laid out and how busy each link is, which code changes are waiting on review, where every container lives, who gets told when something fails, and how to get back in when something goes wrong.
 
 It runs on the lab's own Unraid server, stays on the LAN behind basic auth, and has no cloud dependency.
 
@@ -42,6 +42,16 @@ The diagram is live:
 - **Honest when data is missing.** If the controller can't be read, the wires stay as drawn and a note under the diagram says why. If a reading goes stale, or the controller answers with nothing, the last good one stays on screen, marked stale. Error counts say "since boot", because that is what the switch counts.
 
 ![Network](screenshots/network.png)
+
+### Pull Requests
+Every open pull request on the lab's self-hosted Git server (Forgejo), across all of its repositories, on one tab:
+
+![Pull Requests](screenshots/pull-requests.png)
+
+- **Sorted by what needs doing.** Three sections: **Blocked** (the review gate said BLOCK, a required check failed, or the branch can't merge), **Ready to Merge** (every check passed and the review gate approved), and **In Review** (everything still running). One Expand All / Collapse All toggle, like the other tabs.
+- **The review verdict gets its own column.** Each change goes through CI and an AI review gate before it can merge. The row shows CI and the gate's verdict as separate badges (APPROVE, BLOCK, Pending, No Verdict) and how many review rounds it took. Hovering a badge lists each check, or the round and both reviewers' verdicts.
+- **No stale verdicts.** The verdict comes from the gate's status on the latest commit, so a new push reads Pending instead of showing the old approval.
+- **Honest when data is missing.** No open pull requests reads "No Open PRs". If the Git server can't be read, the tab says the PRs are unknown and keeps the last reading marked stale, never a misleading zero.
 
 ### Alerts
 The alerts that page the phone are set up from the dashboard's Settings tab, saved in Grafana and the same for everyone who opens the page:
@@ -117,6 +127,7 @@ How it works:
 - **Web:** a static page served by nginx, with no build step and no framework. Editable tables save straight back to the server.
 - **API:** a small Python service using only the standard library. It checks each service's status, serves and stores the editable tables, and receives the daily health reports. The tables can only be read or changed through the dashboard itself.
 - **Link data:** the same service reads the UniFi controller every 30 seconds for each switch port's link state, speed, traffic and bond membership, and each device's uplink. A slow controller never holds up other readers.
+- **Pull requests:** the API service reads the Git server's API in the background, at most once a minute and only while someone has the tab open, so the page never waits on it.
 - **Alerts:** Grafana alerting sends to Telegram and email. The dashboard edits contact points, rules and routes through Grafana's API, and the Daily Digest is built by the API service from Grafana's alert history and Loki.
 - **GPU stats:** a separate small service reads the GPU through the NVIDIA driver, so the main API needs no GPU access.
 - **Logs:** Grafana Alloy ships syslog to Loki, and Grafana shows it inside the Logs tab.
@@ -132,5 +143,6 @@ How it works:
 - No secrets live in the dashboard or its repository. Passwords stay in the vault.
 - The editable tables, AI Explain and the link data accept requests only from the dashboard's web server.
 - The alert mail password is a file on the server, read by Grafana and the API service; the page only ever shows the sender and the server.
+- The Pull Requests tab reads the Git server with its own bot account: read-only, token-only (it can't sign in on the web), and its token lives in a file on the server. A write with it is refused.
 - UniFi is read with a View Only local account. Its login lives in a file on the server, never in the repository.
 - Health reports are accepted only from the lab's own servers, and each server can update only its own card.
