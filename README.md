@@ -1,6 +1,6 @@
 # Home Lab Control
 
-A single dashboard for running a home lab: what's up, what broke overnight, how the network is laid out and how busy each link is, which code changes are waiting on review, where every container lives, who gets told when something fails, and how to get back in when something goes wrong.
+A single dashboard for running a home lab: what's up, what broke overnight, how hard every machine is working, how the network is laid out and how busy each link is, which code changes are waiting on review, where every container lives, who gets told when something fails, and how to get back in when something goes wrong.
 
 It runs on the lab's own Unraid server, stays on the LAN behind basic auth, and has no cloud dependency.
 
@@ -27,8 +27,21 @@ Each host gets a card that is green, amber or red. Problems, warnings and notes 
 
 A card also turns red if its host hasn't reported for over a day. A host that is down can't report that it's down, so a missing report counts as a problem in itself.
 
-### Logs
-Syslog from every server, the router and Home Assistant, collected in one place and kept for 30 days. You can filter by host and app, or search with a regex. Logs are stored in Loki and viewed in Grafana inside the dashboard, behind the same login.
+### Machines
+Every machine in the lab reports its vital signs: servers, the firewalls, the DNS Pi, the build box and the dev VM. Each machine is a card. Collapsed, it shows CPU, memory and its hottest sensor, lined up from card to card so a busy or hot machine stands out, plus how long it has been up. A machine that stops answering turns red and says Down.
+
+![Machines](screenshots/machines.png)
+
+Opened, a card reads like a Grafana node dashboard:
+- **Stat row:** arc gauges for CPU, memory and the fullest disk (amber at 75%, red at 90%), threads, RAM, load, and the hottest sensor tinted at 70 and 85 °C with its trend behind it.
+- **Charts:** CPU by mode, memory split into used, cache and free, load over 1, 5 and 15 minutes, disk and network per device, every temperature sensor (each NVMe drive on its own line, an 85 °C limit drawn), pressure stall, and a filesystem list that includes each ZFS pool.
+- **Ranges:** 1 hour, 6 hours, 24 hours or 7 days, with time ticks in your local time.
+
+![A server's card](screenshots/machines-card.png)
+
+Linux and FreeBSD report memory and disks under different names. The tab reads both, so the firewalls get the same memory and disk panels as the servers. Nothing is ever shown as zero when it's really missing. A reading the machine doesn't have (a firewall has no temperature sensors or pressure stall) is listed in one line at the foot of the card, and a reading that couldn't be fetched says so, with the reason.
+
+![A firewall's card](screenshots/machines-firewall.png)
 
 ### Network
 A topology diagram of the whole network (router, switches, access points, servers) and the VLAN plan as an editable table.
@@ -63,6 +76,9 @@ The alerts that page the phone are set up from the dashboard's Settings tab, sav
 ![Alerts](screenshots/alerts.png)
 
 ![Built-in Alerts and Daily Digest](screenshots/alerts-digest.png)
+
+### Logs
+Syslog from every server, the router and Home Assistant, collected in one place and kept for 30 days. You can filter by host and app, or search with a regex. Logs are stored in Loki and viewed in Grafana inside the dashboard, behind the same login.
 
 ### Settings
 Besides the alerts, Settings holds the per-browser choices: which tabs show in the top menu and which one the dashboard opens on, how the network flow animation behaves (follow the system's reduced-motion setting, always animate, or never), and how the status at the top right looks: one capsule, a ring with two lines, or quiet when healthy, with its count, time since the last check and how often it checks. A theme picker at the top right offers nine colour themes, and the network diagram keeps its own dark canvas and link colours in all of them.
@@ -129,6 +145,7 @@ How it works:
 - **Link data:** the same service reads the UniFi controller every 30 seconds for each switch port's link state, speed, traffic and bond membership, and each device's uplink. A slow controller never holds up other readers.
 - **Pull requests:** the API service reads the Git server's API in the background, at most once a minute and only while someone has the tab open, so the page never waits on it.
 - **Alerts:** Grafana alerting sends to Telegram and email. The dashboard edits contact points, rules and routes through Grafana's API, and the Daily Digest is built by the API service from Grafana's alert history and Loki.
+- **Machine metrics:** node_exporter runs on every machine (a container on the Unraid servers, a package on Linux hosts, a plugin on the firewalls) and Prometheus scrapes it every 15 seconds and keeps 30 days. The API service asks Prometheus a fixed set of questions per range in the background and serves the answer to the Machines tab, so the browser never talks to Prometheus.
 - **GPU stats:** a separate small service reads the GPU through the NVIDIA driver, so the main API needs no GPU access.
 - **Logs:** Grafana Alloy ships syslog to Loki, and Grafana shows it inside the Logs tab.
 - **AI:** Ollama on a local GPU answers AI Explain requests. The API reads evidence from Loki and sends the model only scrubbed text.
@@ -144,5 +161,6 @@ How it works:
 - The editable tables, AI Explain and the link data accept requests only from the dashboard's web server.
 - The alert mail password is a file on the server, read by Grafana and the API service; the page only ever shows the sender and the server.
 - The Pull Requests tab reads the Git server with its own bot account: read-only, token-only (it can't sign in on the web), and its token lives in a file on the server. A write with it is refused.
+- Prometheus answers only on the stack's internal network, so nothing on the LAN can query it. The exporters it reads are read-only metrics endpoints on the LAN, with no controls and no secrets.
 - UniFi is read with a View Only local account. Its login lives in a file on the server, never in the repository.
 - Health reports are accepted only from the lab's own servers, and each server can update only its own card.
